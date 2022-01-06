@@ -4,7 +4,7 @@
 
 # .\python.exe /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
 
-Set-Location ..
+#Set-Location ..
 
 Invoke-WebRequest -O esptool.zip https://github.com/espressif/esptool/archive/refs/heads/master.zip
 

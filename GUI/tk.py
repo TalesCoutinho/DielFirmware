@@ -90,6 +90,10 @@ class GroupClass():
         return answer   
 
 def firmware():
+
+    p = subprocess.run(["powershell", "./load_files.ps1"],stdout=sys.stdout)
+    p.communicate()
+
     port = usb_port_list[0]
     bin = '1_7_7.bin'
 
