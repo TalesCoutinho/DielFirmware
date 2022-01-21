@@ -1,4 +1,6 @@
+from distutils import command
 import tkinter as tk
+from turtle import width
 from typing import Collection
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
@@ -9,32 +11,56 @@ from random import randint
 import serial,serial.tools.list_ports
 import subprocess
 
+import requests
+import json
+
 import ctypes, enum
 
 
 usb_port_list = []
 baud = ""
-cb2 = ''
+cb1 = ''
+cbc0 = ''
+token = ''
+user = ''
+password = ''
 
 
-def upgrade_system():
-    p = subprocess.run(["powershell", "./upgrade_system.ps1"],stdout=sys.stdout)
+
+
+
+def upgrade_python():
+    p = subprocess.run(["powershell", "./python_install.ps1"],stdout=sys.stdout)
     p.communicate()
 
-def popup():
+def upgrade_esptool():
+    p = subprocess.run(["powershell", "./esptool_install.ps1"],stdout=sys.stdout)
+    p.communicate()
+
+def popup_system():
     python_version = os.popen('python --version').readlines()
-    if(python_version[0] == "Python 3.9.7\n"):
-        ttk.dialogs.Messagebox.ok(message = 'Sistema atualizado', title='Sistema atualizado', alert=False, parent=None)
+    esptool_version = os.popen('esptool.py version').readlines()
+
+    if(python_version[0] == "Python 3.9.8\n"):
+        ttk.dialogs.Messagebox.ok(message = 'Python atualizado', title='Python atualizado', alert=False, parent=None)
     else:
-        if(ttk.dialogs.Messagebox.show_question(message = 'Sistema desatualizado, gostaria de atualizar?', parent=None) == 'Yes'):
-            upgrade_system()
+        if(ttk.dialogs.Messagebox.show_question(message = 'Python desatualizado, gostaria de atualizar?', parent=None) == 'Yes'):
+            upgrade_python()
+
+    if(esptool_version[0] == "esptool.py v3.2\n"):
+        ttk.dialogs.Messagebox.ok(message = 'Esptool atualizado', title='Esptool atualizado', alert=False, parent=None)
+    else:
+        if(ttk.dialogs.Messagebox.show_question(message = 'Esptool desatualizado, gostaria de atualizar?', parent=None) == 'Yes'):
+            upgrade_python()
+
+
+
 
 
 
 
 def find_USB_device(USB_DEV_NAME=None):
     myports = [tuple(p) for p in list(serial.tools.list_ports.comports())]
-    print(myports)
     global usb_port_list
     usb_port_list = [p[0] for p in myports]
     usb_device_list = [p[1] for p in myports]
@@ -55,110 +81,149 @@ def find_USB_device(USB_DEV_NAME=None):
                 print(usb_id[0])
                 return usb_id
                 
-class GroupClass():
-    def connect(self):
-        global cb2
-        baud = cb2.get()
-        self.desc.setText("")
-        self.desc.setText(">> trying to connect to port %s ..." % self.typeBox.currentText())
-        if self.serial is None:
-            self.serial=serial.Serial(self.typeBox.currentText(), baud, timeout=1)
-            time.sleep(0.05)
-            #self.serial.write(b'hello')
-            answer=self.readData()
-            if answer!="":
-                self.desc.setText(self.desc.toPlainText()+"\n>> Connected!\n"+answer)
-        else:
-            self.desc.setText(">> {} already Opened!\n".format(self.typeBox.currentText()))
-
-    def sendData(self):
-        if self.serial.isOpen():
-            if self.title.text() != "":
-                self.serial.write(self.title.text().encode())
-                answer=self.readData()
-                if(self.title.text().encode()=="scan"):
-                    print("scanning results -> "+answer.find("0x"))
-                else:
-                    print(answer.find("0x"))
-                self.desc.setText(self.desc.toPlainText()+"\n"+answer)
-
-    def readData(self):
-        self.serial.flush() # it is buffering. required to get the data out *now*
-        answer=""
-        while  self.serial.inWaiting()>0: #self.serial.readable() and
-                answer += "\n"+str(self.serial.readline()).replace("\\r","").replace("\\n","").replace("'","").replace("b","")
-        return answer   
 
 def firmware():
+    FileName = ''
+    URL = ''
+    bin = ''
 
-    p = subprocess.run(["powershell", "./load_files.ps1"],stdout=sys.stdout)
-    p.communicate()
+    global cbc0
+    print(cbc0.get())
 
-    port = usb_port_list[0]
-    bin = '1_7_7.bin'
+    global cb1
+    port = cb1.get()[0] + cb1.get()[1] + cb1.get()[2] + cb1.get()[3]
+    print(port)
+    
+    if(cbc0.get() == 'DAC'):
+        FileName = '.\dac4_1_5_2.rar'
+        URL = X
+        bin = '1_5_2.bin'
+    if(cbc0.get() == 'DUT'):
+        FileName = '.\dut3_1_7_7.7z'
+        URL = X
+        bin = '1_7_7.bin'
+    if(cbc0.get() == 'DRI'):
+        return
 
-    os.system('python ..\esptool\esptool-master\esptool.py --chip esp32 --port '+ port +' --baud 921600 --before default_reset --after hard_reset write_flash -z --flash_mode dio --flash_freq 80m --flash_size detect 0x19000 ota_data_initial.bin 0x1000 bootloader.bin 0x20000 '+ bin +' 0x8000 partitions.bin')
-  
-
-def check_cbox():
-    global baud
-    global cb2
-    print(cb2.get())
-    if cb2.get() != baud:
-        baud = cb2.get()
-
-
-def main():
-    subprocess.run(["powershell", "-Command", 'Set-ExecutionPolicy RemoteSigned'])
-    root = ttk.Window(themename="darkly")
-
-    # Left Frame
-    left_frame = tk.Frame(root)
-    left_frame.grid(column= 0, row = 0,padx= 10, pady= 10)
-
-    b1 = ttk.Button(left_frame, text="Verificar sistema", bootstyle=(INFO, OUTLINE),command = popup)
-    b1.grid(column= 0, row = 0, padx=5, pady=10)
-
-    b2 = ttk.Button(left_frame, text="Atualizar o firmware", bootstyle=(INFO, OUTLINE),command = firmware)
-    b2.grid(column= 0, row = 1, padx=5, pady=10)
+    subprocess.run(["powershell", "./load_files.ps1 "+ FileName + " " + URL],stdout=sys.stdout)
 
 
-    # Central frame
-    central_frame = tk.Frame(root)
-    central_frame.grid(column = 1,row=0, padx = 10, pady=10)
-
-    cbc0 = ttk.Combobox(central_frame, values = ['DAC', 'DUT', 'DAM', 'DRI'])
-    cbc0.current(0)
-    cbc0.grid(column = 0, row = 0,pady= 5)
-
-    cbc1 = ttk.Combobox(central_frame, values = ['1', '2', '3', '4'])
-    cbc1.current(0)
-    cbc1.grid(column = 0, row = 1,pady= 5)
-
-    # Right frame
-
-    right_frame = tk.Frame(root)
-    right_frame.grid(column = 3,row=0, padx = 5, pady=5)
-
-    content = GroupClass()
-
-    cb1 = ttk.Combobox(right_frame, values = find_USB_device())
-    cb1.grid(column = 0, row = 0, pady = 5)
-
-    global cb2
-    cb2 = ttk.Combobox(right_frame, values = ['1200', '2400', '4800', '9600', '115200'])
-    cb2.current(0)
-    cb2.grid(column = 1, row = 0, pady = 5)
-
-    connect_bt = ttk.Button(right_frame, text="Conectar", bootstyle=(INFO, OUTLINE), command = content.connect)
-    connect_bt.grid(column = 2, row = 0)
+    subprocess.run(["powershell", "./esp_command.ps1 "+ port + " " + bin],stdout=sys.stdout)
 
 
-    place_holder = tk.Text(right_frame, width = 60, height= 10)
-    place_holder.grid( column= 0, row = 1, columnspan = 3)
+    subprocess.run(["powershell", "./cleanup.ps1"],stdout=sys.stdout)
 
-    root.mainloop()
+    ttk.dialogs.Messagebox.ok(message = 'Firmware atualizado', title='Firmware atualizado', alert=False, parent=None)
 
+
+
+class main_window:
+    def __init__(self, root):
+        subprocess.run(["powershell", "-Command", 'Set-ExecutionPolicy RemoteSigned'])
+
+        # Left Frame
+        self.left_frame = tk.Frame(root)
+        self.left_frame.grid(column= 0, row = 0,padx= 10, pady= 10)
+
+        self.b1 = ttk.Button(self.left_frame, text="Verificar sistema", bootstyle=(INFO, OUTLINE),command = popup_system)
+        self.b1.grid(column= 0, row = 0, padx=5, pady=2)
+
+
+        # Central frame
+        self.central_frame = tk.Frame(root)
+        self.central_frame.grid(column = 1,row=0, padx = 10, pady=10)
+
+        global cbc0
+        self.usernameLabel = ttk.Label(self.central_frame, text='Selecionar placa')
+        self.usernameLabel.grid(row = 0, column = 0,pady= 2)
+        cbc0 = ttk.Combobox(self.central_frame, values = ['DAC', 'DUT', 'DAM', 'DRI'])
+        cbc0.current(0)
+        cbc0.grid(column = 0, row = 1,pady= 3)
+
+        self.usernameLabel = ttk.Label(self.central_frame, text='Selecionar versão')
+        self.usernameLabel.grid(column = 0, row = 2,pady= 2)
+        self.cbc1 = ttk.Combobox(self.central_frame, values = ['1', '2', '3', '4'])
+        self.cbc1.current(0)
+        self.cbc1.grid(column = 0, row = 3,pady= 5)
+
+        # Right frame
+
+        self.right_frame = tk.Frame(root)
+        self.right_frame.grid(column = 3,row=0, padx = 5, pady=5)
+
+        self.usernameLabel = ttk.Label(self.right_frame, text='Selecionar porta')
+        self.usernameLabel.grid(column = 0, row = 0,pady= 2)
+        global cb1
+        cb1 = ttk.Combobox(self.right_frame, values = find_USB_device())
+        cb1.current(len(find_USB_device())-1)
+        cb1.grid(column = 0, row = 1, pady = 5, padx = 5)
+
+
+        self.usernameLabel = ttk.Label(self.right_frame, text='')
+        self.usernameLabel.grid(column = 0, row = 2,pady= 2)
+        self.b4 = ttk.Button(self.right_frame, text="Atualizar o firmware", bootstyle=(INFO, OUTLINE),command = firmware)
+        self.b4.grid(row = 3, padx=5, pady=5)
+
+
+
+
+
+
+
+class tela_login:
+    def __init__(self, master):
+        self.root = master
+        self.frame = tk.Frame(self.root)
+        self.frame.grid(column= 0, row = 0,padx= 10, pady= 10)
+
+        self.usernameLabel = ttk.Label(self.frame, text='Usuário')
+        self.usernameLabel.grid(row = 0, column = 0)
+        self.myUsername = tk.StringVar()
+        self.username = ttk.Entry(self.frame, width = 40, textvariable=self.myUsername)
+        self.username.grid(row = 1, column = 0, pady = 5)
+
+        self.passwordLabel = ttk.Label(self.frame, text='Senha')
+        self.passwordLabel.grid(row = 2, column = 0)
+        self.myPassword = tk.StringVar()
+        self.password = ttk.Entry(self.frame, show="*", width = 40, textvariable= self.myPassword)
+        self.password.grid(row = 3, column = 0, pady = 5)
+
+        self.button = ttk.Button(self.frame, text="Conectar", bootstyle=(INFO, OUTLINE), width = 10, command=self.get_credentials)
+        self.button.grid(row = 4, column = 0, pady = 5)
+
+    def get_credentials(self):
+        global user
+        global password
+        user = self.myUsername.get()
+        password = self.myPassword.get()
+        self.login()
+
+    def login(self):
+        global user
+        global password
+        global token
+        url = 'https://api.dielenergia.com/login'
+        body = {'user':user,'password':password}
+        headers = {'Content-Type':'application/json;charset=utf-8'}
+        response = requests.post(url, data = json.dumps(body), headers=headers)
+        response = response.content.decode("utf-8")
+        response=json.loads(response)
+        if(response == "b'Invalid password'"):
+            ttk.dialogs.Messagebox.ok(message = 'Usuário ou senha incorretos', title='Login fail', alert=False, parent=None)
+        else:
+            token = response["token"]
+        
+    def newWindow(self):
+        root = self.root
+        self.app = main_window(root)
+
+
+
+
+
+    
 
 if __name__ == '__main__':
-    main()
+    root = ttk.Window(themename="darkly")
+    app = tela_login(root)
+    root.mainloop()
