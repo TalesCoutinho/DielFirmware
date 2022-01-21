@@ -1,7 +1,8 @@
 from distutils import command
+from fileinput import filename
 import tkinter as tk
 from turtle import width
-from typing import Collection
+from typing import Collection, final
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 
@@ -14,8 +15,17 @@ import subprocess
 import requests
 import json
 
+import logging
+
 import ctypes, enum
 
+
+    # c = subprocess.run(["powershell", "./cleanup.ps1"],stdout=sys.stdout)
+    # for line in iter(c.stdout.readline,''):
+    #     if line.rstrip() == 'Erro':
+    #         logging.error('Erro ao limpar o sistema')
+    #         ttk.dialogs.Messagebox.ok(message = 'Erro', alert=False, parent=None)
+    #         flag = False
 
 usb_port_list = []
 baud = ""
@@ -25,34 +35,44 @@ token = ''
 user = ''
 password = ''
 
+logging.basicConfig(filename='log_file.log', level=logging.DEBUG,
+                    format='%(asctime)s:%(levelname)s:%(message)s')
+
 
 
 
 
 def upgrade_python():
     p = subprocess.run(["powershell", "./python_install.ps1"],stdout=sys.stdout)
-    p.communicate()
+    for line in iter(p.stdout.readline,''):
+        if line.rstrip() == 'Erro':
+            logging.error('Erro ao instalar o python')
+            ttk.dialogs.Messagebox.ok(message = 'Erro ao atualizar o sistema', alert=False, parent=None)
+
 
 def upgrade_esptool():
     p = subprocess.run(["powershell", "./esptool_install.ps1"],stdout=sys.stdout)
-    p.communicate()
+    for line in iter(p.stdout.readline,''):
+        if line.rstrip() == 'Erro':
+            logging.error('Erro ao instalar o esptool')
+            ttk.dialogs.Messagebox.ok(message = 'Erro ao atualizar o sistema', alert=False, parent=None)
 
 def popup_system():
     python_version = os.popen('python --version').readlines()
     esptool_version = os.popen('esptool.py version').readlines()
+    esptool_has_file = os.popen('Microsoft.PowerShell.Management\Test-Path .\esptool').readlines()
+    print(esptool_has_file)
 
-    if(python_version[0] == "Python 3.9.8\n"):
-        ttk.dialogs.Messagebox.ok(message = 'Python atualizado', title='Python atualizado', alert=False, parent=None)
-    else:
+    if(python_version[0] != "Python 3.9.8\n"):
         if(ttk.dialogs.Messagebox.show_question(message = 'Python desatualizado, gostaria de atualizar?', parent=None) == 'Yes'):
             upgrade_python()
-
-    if(esptool_version[0] == "esptool.py v3.2\n"):
-        ttk.dialogs.Messagebox.ok(message = 'Esptool atualizado', title='Esptool atualizado', alert=False, parent=None)
-    else:
+    if(esptool_has_file != "True" or esptool_version[0] != "esptool.py v3.2\n"):
         if(ttk.dialogs.Messagebox.show_question(message = 'Esptool desatualizado, gostaria de atualizar?', parent=None) == 'Yes'):
-            upgrade_python()
+            upgrade_esptool()
+    else:
+        ttk.dialogs.Messagebox.ok(message = 'Sistema atualizado', title='Sistema atualizado', alert=False, parent=None)
 
+# 
 
 
 
@@ -82,10 +102,9 @@ def find_USB_device(USB_DEV_NAME=None):
                 return usb_id
                 
 
-def firmware():
-    FileName = ''
-    URL = ''
-    bin = ''
+def firmware(FileName, bin):
+    URL = FileName + bin
+    flag = True
 
     global cbc0
     print(cbc0.get())
@@ -94,32 +113,59 @@ def firmware():
     port = cb1.get()[0] + cb1.get()[1] + cb1.get()[2] + cb1.get()[3]
     print(port)
     
-    if(cbc0.get() == 'DAC'):
-        FileName = '.\dac4_1_5_2.rar'
-        URL = X
-        bin = '1_5_2.bin'
-    if(cbc0.get() == 'DUT'):
-        FileName = '.\dut3_1_7_7.7z'
-        URL = X
-        bin = '1_7_7.bin'
-    if(cbc0.get() == 'DRI'):
-        return
 
-    subprocess.run(["powershell", "./load_files.ps1 "+ FileName + " " + URL],stdout=sys.stdout)
+    a = subprocess.run(["powershell", "./load_files.ps1 "+ FileName + " " + URL],stdout=sys.stdout)
+    for line in iter(a.stdout.readline,''):
+        if line.rstrip() == 'Erro':
+            logging.error('Erro ao baixar os arquivos do bash')
+            ttk.dialogs.Messagebox.ok(message = 'Erro', alert=False, parent=None)
+            flag = False
 
 
-    subprocess.run(["powershell", "./esp_command.ps1 "+ port + " " + bin],stdout=sys.stdout)
+    b = subprocess.run(["powershell", "./esp_command.ps1 "+ port + " " + bin],stdout=sys.stdout)
+    for line in iter(b.stdout.readline,''):
+        if line.rstrip() == 'Erro':
+            logging.error('Erro de comunicação com a porta serial')
+            ttk.dialogs.Messagebox.ok(message = 'Erro', alert=False, parent=None)
+            flag = False
 
 
-    subprocess.run(["powershell", "./cleanup.ps1"],stdout=sys.stdout)
 
-    ttk.dialogs.Messagebox.ok(message = 'Firmware atualizado', title='Firmware atualizado', alert=False, parent=None)
+    if (flag == True):
+        ttk.dialogs.Messagebox.ok(message = 'Firmware atualizado', title='Firmware atualizado', alert=False, parent=None)
 
 
 
 class main_window:
+
+    def pick_version(self, event):
+        global cbc0
+        self.cbc1.config(value = self.final_dictionary[cbc0.get()])
+
+
     def __init__(self, root):
         subprocess.run(["powershell", "-Command", 'Set-ExecutionPolicy RemoteSigned'])
+
+        self.final_dictionary = {}
+
+        global token
+        url = 'https://api.dielenergia.com/devs/get-firmware-versions-v2'
+        body = {"fwTypes":["prod"]}
+        headers = {'Content-Type':'application/json;charset=utf-8','Authorization':'Bearer '+token}
+        response = requests.post(url, data = json.dumps(body), headers=headers)
+        response = response.content.decode("utf-8")
+        response = json.loads(response)
+        response = response["list"]
+
+
+        for element in response:
+            if element['hwRev'] in self.final_dictionary:
+                self.final_dictionary[element['hwRev']].append(element['fwVers'])
+            else:
+                self.final_dictionary[element['hwRev']] = [element['fwVers']]
+
+
+
 
         # Left Frame
         self.left_frame = tk.Frame(root)
@@ -134,15 +180,16 @@ class main_window:
         self.central_frame.grid(column = 1,row=0, padx = 10, pady=10)
 
         global cbc0
-        self.usernameLabel = ttk.Label(self.central_frame, text='Selecionar placa')
-        self.usernameLabel.grid(row = 0, column = 0,pady= 2)
-        cbc0 = ttk.Combobox(self.central_frame, values = ['DAC', 'DUT', 'DAM', 'DRI'])
+        self.cbc0Label = ttk.Label(self.central_frame, text='Selecionar placa')
+        self.cbc0Label.grid(row = 0, column = 0,pady= 2)
+        cbc0 = ttk.Combobox(self.central_frame, values = list(self.final_dictionary.keys()))
+        cbc0.bind('<<ComboboxSelected>>', self.pick_version)
         cbc0.current(0)
         cbc0.grid(column = 0, row = 1,pady= 3)
 
-        self.usernameLabel = ttk.Label(self.central_frame, text='Selecionar versão')
-        self.usernameLabel.grid(column = 0, row = 2,pady= 2)
-        self.cbc1 = ttk.Combobox(self.central_frame, values = ['1', '2', '3', '4'])
+        self.cbc1Label = ttk.Label(self.central_frame, text='Selecionar versão')
+        self.cbc1Label.grid(column = 0, row = 2,pady= 2)
+        self.cbc1 = ttk.Combobox(self.central_frame, values = [" "])
         self.cbc1.current(0)
         self.cbc1.grid(column = 0, row = 3,pady= 5)
 
@@ -161,8 +208,13 @@ class main_window:
 
         self.usernameLabel = ttk.Label(self.right_frame, text='')
         self.usernameLabel.grid(column = 0, row = 2,pady= 2)
-        self.b4 = ttk.Button(self.right_frame, text="Atualizar o firmware", bootstyle=(INFO, OUTLINE),command = firmware)
+        self.b4 = ttk.Button(self.right_frame, text="Atualizar o firmware", bootstyle=(INFO, OUTLINE),command = self.get_params)
         self.b4.grid(row = 3, padx=5, pady=5)
+
+    def get_params(self):
+        FileName = cbc0.get() + "/" + self.cbc1.get()
+        bin = self.cbc1.get() + ".bin"
+        firmware(FileName, bin)
 
 
 
@@ -207,15 +259,17 @@ class tela_login:
         headers = {'Content-Type':'application/json;charset=utf-8'}
         response = requests.post(url, data = json.dumps(body), headers=headers)
         response = response.content.decode("utf-8")
-        response=json.loads(response)
-        if(response == "b'Invalid password'"):
+        if(response == "Invalid password"):
             ttk.dialogs.Messagebox.ok(message = 'Usuário ou senha incorretos', title='Login fail', alert=False, parent=None)
         else:
+            response=json.loads(response)
             token = response["token"]
+            self.openMainWindow()
         
-    def newWindow(self):
+    def openMainWindow(self):
         root = self.root
-        self.app = main_window(root)
+        self.newWindow = tk.Toplevel(root)
+        self.app = main_window(self.newWindow)
 
 
 
