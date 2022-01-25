@@ -35,7 +35,7 @@ token = ''
 user = ''
 password = ''
 
-logging.basicConfig(filename='log_file.log', level=logging.DEBUG,
+logging.basicConfig(filename='log_file.log', level=logging.WARNING,
                     format='%(asctime)s:%(levelname)s:%(message)s')
 
 
@@ -141,6 +141,7 @@ class main_window:
     def pick_version(self, event):
         global cbc0
         self.cbc1.config(value = self.final_dictionary[cbc0.get()])
+        self.cbc1.current(0)
 
 
     def __init__(self, root):
@@ -184,7 +185,7 @@ class main_window:
         self.cbc0Label.grid(row = 0, column = 0,pady= 2)
         cbc0 = ttk.Combobox(self.central_frame, values = list(self.final_dictionary.keys()))
         cbc0.bind('<<ComboboxSelected>>', self.pick_version)
-        cbc0.current(0)
+        # cbc0.current(0)
         cbc0.grid(column = 0, row = 1,pady= 3)
 
         self.cbc1Label = ttk.Label(self.central_frame, text='Selecionar versão')
