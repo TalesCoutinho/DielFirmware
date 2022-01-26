@@ -41,6 +41,8 @@ logging.basicConfig(filename='log_file.log', level=logging.WARNING,
 
 
 
+def on_closing():
+    root.destroy()
 
 def upgrade_python():
     p = subprocess.run(["powershell", "./python_install.ps1"],stdout=sys.stdout)
@@ -72,7 +74,6 @@ def popup_system():
     else:
         ttk.dialogs.Messagebox.ok(message = 'Sistema atualizado', title='Sistema atualizado', alert=False, parent=None)
 
-# 
 
 
 
@@ -107,11 +108,9 @@ def firmware(FileName, bin):
     flag = True
 
     global cbc0
-    print(cbc0.get())
 
     global cb1
     port = cb1.get()[0] + cb1.get()[1] + cb1.get()[2] + cb1.get()[3]
-    print(port)
     
 
     a = subprocess.run(["powershell", "./load_files.ps1 "+ FileName + " " + URL],stdout=sys.stdout)
@@ -136,7 +135,7 @@ def firmware(FileName, bin):
 
 
 
-class main_window:
+class gravacao_firmware:
 
     def pick_version(self, event):
         global cbc0
@@ -145,7 +144,10 @@ class main_window:
 
 
     def __init__(self, root):
+        # root.protocol("WM_DELETE_WINDOW", on_closing)
         subprocess.run(["powershell", "-Command", 'Set-ExecutionPolicy RemoteSigned'])
+        photo = tk.PhotoImage(file = "Logo.png")
+        root.iconphoto(False, photo)
 
         self.final_dictionary = {}
 
@@ -270,7 +272,35 @@ class tela_login:
     def openMainWindow(self):
         root = self.root
         self.newWindow = tk.Toplevel(root)
-        self.app = main_window(self.newWindow)
+        self.app = menu(self.newWindow)
+        self.root.withdraw()
+
+class menu:
+    def __init__(self, root):
+        root.protocol("WM_DELETE_WINDOW", on_closing)
+        photo = tk.PhotoImage(file = "Logo.png")
+        root.title('Diel Energia')
+        root.iconphoto(False, photo)
+        self.frame = tk.Frame(root)
+        self.frame.pack(padx=30)
+        self.main_label = ttk.Label(self.frame, text= 'Menu')
+        self.main_label.grid(column= 0, row=0, pady=5)
+
+        self.firmwareButton = ttk.Button(self.frame, text="Firmware", bootstyle=(INFO, OUTLINE), width = 20, command=self.tela_firmware)
+        self.firmwareButton.grid(column= 0, row=1, pady=5, padx=30)
+
+        self.jigaButton = ttk.Button(self.frame, text="JIGA", bootstyle=(INFO, OUTLINE), width = 20)
+        self.jigaButton.grid(column= 0, row=2, pady=5, padx=30)
+
+        self.comissionamentoButton = ttk.Button(self.frame, text="Comissionamento", bootstyle=(INFO, OUTLINE), width = 20)
+        self.comissionamentoButton.grid(column= 0, row=3, pady=5, padx=30)
+
+    def tela_firmware(self):
+        self.newWindow = tk.Toplevel(root)
+        self.app = gravacao_firmware(self.newWindow)
+        root.withdraw()
+
+
 
 
 
@@ -279,6 +309,10 @@ class tela_login:
     
 
 if __name__ == '__main__':
-    root = ttk.Window(themename="darkly")
+    root = ttk.Window("Diel Energia",themename="darkly")
+    photo = tk.PhotoImage(file = "Logo.png")
+    root.iconphoto(False, photo)
     app = tela_login(root)
+    root.protocol("WM_DELETE_WINDOW", on_closing)
     root.mainloop()
+
