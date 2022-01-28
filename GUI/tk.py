@@ -1,31 +1,19 @@
-from distutils import command
 from fileinput import filename
 import tkinter as tk
-from turtle import width
-from typing import Collection, final
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 
-import sys,os, time
-import platform
-from random import randint
-import serial,serial.tools.list_ports
+import sys,os
+import serial
 import subprocess
 
 import requests
-import json
+import json #native
 
 import logging
 
-import ctypes, enum
 
 
-    # c = subprocess.run(["powershell", "./cleanup.ps1"],stdout=sys.stdout)
-    # for line in iter(c.stdout.readline,''):
-    #     if line.rstrip() == 'Erro':
-    #         logging.error('Erro ao limpar o sistema')
-    #         ttk.dialogs.Messagebox.ok(message = 'Erro', alert=False, parent=None)
-    #         flag = False
 
 usb_port_list = []
 baud = ""
@@ -38,6 +26,58 @@ password = ''
 logging.basicConfig(filename='log_file.log', level=logging.WARNING,
                     format='%(asctime)s:%(levelname)s:%(message)s')
 
+def get_log():
+    subprocess.run(["powershell", "./log_file.log"])
+
+def yes_no_popup_error(error_message):
+    a = tk.Toplevel(root)
+    a.title('Mensagem de erro')
+    photo = tk.PhotoImage(file = "Logo.png")
+    a.iconphoto(False, photo)
+
+
+    label = ttk.Label(a,text=error_message + "Gostaria de ver o Log?")
+    label.grid(column= 0, row = 0, padx = 30, pady = 20)
+
+    button0 = ttk.Button(a, text="Sim", bootstyle=(INFO, OUTLINE),command = get_log)
+    button0.grid(column= 0, row = 1, padx = 15, pady = 5)
+                
+    button1 = ttk.Button(a, text="Fechar", bootstyle=(INFO, OUTLINE),command = a.destroy)
+    button1.grid(column= 1, row = 1, padx = 15, pady = 5)
+
+
+
+#, command = change_to_yes(return_value, a)
+def ok_popup_message(message):
+    global return_value
+    return_value = 'No'
+    a = tk.Toplevel(root)
+    a.title('Diel Energia')
+    photo = tk.PhotoImage(file = "Logo.png")
+    a.iconphoto(False, photo)
+
+
+    label = ttk.Label(a,text=message)
+    label.grid(column= 0, row = 0, padx = 30, pady = 10)
+
+    button0 = ttk.Button(a, text="Ok", bootstyle=(INFO, OUTLINE), command = a.destroy)
+    button0.grid(column= 0, row = 1, padx = 5, pady = 5)
+
+    return return_value
+
+def run_ps_file(file_name, error_message, log_message, success_name):
+    p = subprocess.Popen(["powershell",file_name], stdout=subprocess.PIPE)
+    with p.stdout:
+        for line in iter(p.stdout.readline, b''):
+            line = line.decode("utf-8")
+            if(line == 'Erro\r\n'):
+                logging.error(log_message)
+                yes_no_popup_error(error_message)
+                return
+    ok_popup_message(success_name + ' finalizado com sucesso.')
+    
+                
+
 
 
 
@@ -45,34 +85,26 @@ def on_closing():
     root.destroy()
 
 def upgrade_python():
-    p = subprocess.run(["powershell", "./python_install.ps1"],stdout=sys.stdout)
-    for line in iter(p.stdout.readline,''):
-        if line.rstrip() == 'Erro':
-            logging.error('Erro ao instalar o python')
-            ttk.dialogs.Messagebox.ok(message = 'Erro ao atualizar o sistema', alert=False, parent=None)
+    run_ps_file('./python_install.ps1', 'Erro ao instalar o python. ','Erro ao instalar o python','Python instalado com sucesso')
+            
 
 
 def upgrade_esptool():
-    p = subprocess.run(["powershell", "./esptool_install.ps1"],stdout=sys.stdout)
-    for line in iter(p.stdout.readline,''):
-        if line.rstrip() == 'Erro':
-            logging.error('Erro ao instalar o esptool')
-            ttk.dialogs.Messagebox.ok(message = 'Erro ao atualizar o sistema', alert=False, parent=None)
+    run_ps_file('./esptool_install.ps1', 'Erro ao instalar o esptool.  ','Erro ao instalar o esptool', 'Esptool instalado com sucesso')
 
 def popup_system():
     python_version = os.popen('python --version').readlines()
     esptool_version = os.popen('esptool.py version').readlines()
-    esptool_has_file = os.popen('Microsoft.PowerShell.Management\Test-Path .\esptool').readlines()
-    print(esptool_has_file)
+    esptool_has_file = os.path.exists('./esptool')
 
-    if(python_version[0] != "Python 3.9.8\n"):
-        if(ttk.dialogs.Messagebox.show_question(message = 'Python desatualizado, gostaria de atualizar?', parent=None) == 'Yes'):
+    if(python_version[0] != "Python 3.9.8\n" or esptool_has_file != True or esptool_version[0] != "esptool.py v3.2\n"):
+        ok_popup_message('Sistema desatualizado, realizando atualizações')
+        if(python_version[0] != "Python 3.9.8\n"):
             upgrade_python()
-    if(esptool_has_file != "True" or esptool_version[0] != "esptool.py v3.2\n"):
-        if(ttk.dialogs.Messagebox.show_question(message = 'Esptool desatualizado, gostaria de atualizar?', parent=None) == 'Yes'):
+        if(esptool_has_file != True or esptool_version[0] != "esptool.py v3.2\n"):
             upgrade_esptool()
     else:
-        ttk.dialogs.Messagebox.ok(message = 'Sistema atualizado', title='Sistema atualizado', alert=False, parent=None)
+        ok_popup_message('Sistema atualizado.')
 
 
 
@@ -104,35 +136,25 @@ def find_USB_device(USB_DEV_NAME=None):
                 
 
 def firmware(FileName, bin):
-    URL = FileName + bin
     flag = True
 
     global cbc0
 
     global cb1
     port = cb1.get()[0] + cb1.get()[1] + cb1.get()[2] + cb1.get()[3]
+
+    url = 'https://api.dielenergia.com/get-firmware-file/prod/'+FileName+'.bin'
+    headers = {'Authorization':'Bearer '+token}
+    r = requests.get(url, headers, allow_redirects=True)
+    open(bin, 'wb').write(r.content)
     
 
-    a = subprocess.run(["powershell", "./load_files.ps1 "+ FileName + " " + URL],stdout=sys.stdout)
-    for line in iter(a.stdout.readline,''):
-        if line.rstrip() == 'Erro':
-            logging.error('Erro ao baixar os arquivos do bash')
-            ttk.dialogs.Messagebox.ok(message = 'Erro', alert=False, parent=None)
-            flag = False
+    run_ps_file("./load_files.ps1 "+ bin, 'Erro ao baixar os arquivos.  ', 'Erro ao passar os arquivos binários para a pasta do esptool. ', 'Arquivos organizados com sucesso')
 
-
-    b = subprocess.run(["powershell", "./esp_command.ps1 "+ port + " " + bin],stdout=sys.stdout)
-    for line in iter(b.stdout.readline,''):
-        if line.rstrip() == 'Erro':
-            logging.error('Erro de comunicação com a porta serial')
-            ttk.dialogs.Messagebox.ok(message = 'Erro', alert=False, parent=None)
-            flag = False
-
-
+    run_ps_file("./esp_command.ps1 "+ port + " " + bin, 'Erro ao passar o firmware. Verifique a porta COM. ', 'Erro ao rodar o comando do esptool', 'Firmware passado com sucesso')
 
     if (flag == True):
-        ttk.dialogs.Messagebox.ok(message = 'Firmware atualizado', title='Firmware atualizado', alert=False, parent=None)
-
+        ok_popup_message('Firmware atualizado')
 
 
 class gravacao_firmware:
@@ -145,7 +167,7 @@ class gravacao_firmware:
 
     def __init__(self, root):
         # root.protocol("WM_DELETE_WINDOW", on_closing)
-        subprocess.run(["powershell", "-Command", 'Set-ExecutionPolicy RemoteSigned'])
+        subprocess.run(["powershell", "-Command", 'Set-ExecutionPolicy RemoteSigned'], capture_output=True, text=True, input="A")
         photo = tk.PhotoImage(file = "Logo.png")
         root.iconphoto(False, photo)
 

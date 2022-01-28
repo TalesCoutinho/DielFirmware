@@ -4,39 +4,27 @@ Write-Output "Load Files"
 
 $FileName = $args[0]
 
-$URL = $args[1]
-
 try{
-Set-Location .\esptool\
-
-Set-Location .\esptool-master\
-
-if (Test-Path -Path $FileName) {
-      Remove-Item $FileName
-}
 
 
-# Copy-Item "..\..\..\..\$FileName" -Destination ".\esptool\esptool-master"
+    
+    Set-Location .\esptool\
 
-Invoke-WebRequest -O $FileName $URL
-# try{
-# Expand-Archive .\$FileName
-# Write-Output 'A'
-# }
-# catch{
-# $7zipPath = "$env:ProgramFiles\7-Zip\7z.exe"
+    Set-Location .\esptool-master\
 
-# if (-not (Test-Path -Path $7zipPath -PathType Leaf)) {
-#     throw "7 zip file '$7zipPath' not found"
-# }
+    if (Test-Path -Path $FileName) {
+        Remove-Item $FileName
+    }
 
-# Set-Alias 7zip $7zipPath
+    Copy-Item "..\..\$FileName" -Destination ".\"
 
-# 7zip e $FileName
-# Write-Output 'A'
-# }
-
-Write-Output "Load Files - Completo"
+    Set-Location ..
+    Set-Location ..
+    
+    if (Test-Path -Path $FileName) {
+        Remove-Item $FileName
+    }
+Write-Output "Load Files - Completo" 
 }
 catch{
     Write-Output "Erro"
