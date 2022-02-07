@@ -1,16 +1,19 @@
 from fileinput import filename
+from msilib.schema import File
 import tkinter as tk
+from turtle import width
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 
 import sys,os
-import serial
+import serial, serial.tools.list_ports
 import subprocess
 
 import requests
 import json #native
 
 import logging
+
 
 
 
@@ -22,6 +25,10 @@ cbc0 = ''
 token = ''
 user = ''
 password = ''
+alert_list = ["","",""]
+alert_label0 = ''
+alert_label1 = ''
+alert_label2 = ''
 
 logging.basicConfig(filename='log_file.log', level=logging.WARNING,
                     format='%(asctime)s:%(levelname)s:%(message)s')
@@ -29,54 +36,71 @@ logging.basicConfig(filename='log_file.log', level=logging.WARNING,
 def get_log():
     subprocess.run(["powershell", "./log_file.log"])
 
-def yes_no_popup_error(error_message):
-    a = tk.Toplevel(root)
-    a.title('Mensagem de erro')
-    photo = tk.PhotoImage(file = "Logo.png")
-    a.iconphoto(False, photo)
-
-
-    label = ttk.Label(a,text=error_message + "Gostaria de ver o Log?")
-    label.grid(column= 0, row = 0, padx = 30, pady = 20)
-
-    button0 = ttk.Button(a, text="Sim", bootstyle=(INFO, OUTLINE),command = get_log)
-    button0.grid(column= 0, row = 1, padx = 15, pady = 5)
-                
-    button1 = ttk.Button(a, text="Fechar", bootstyle=(INFO, OUTLINE),command = a.destroy)
-    button1.grid(column= 1, row = 1, padx = 15, pady = 5)
 
 
 
-#, command = change_to_yes(return_value, a)
-def ok_popup_message(message):
-    global return_value
-    return_value = 'No'
-    a = tk.Toplevel(root)
-    a.title('Diel Energia')
-    photo = tk.PhotoImage(file = "Logo.png")
-    a.iconphoto(False, photo)
+def alert_function(message):
+    global alert_list
+    alert_list.pop()
+    alert_list.insert(0, message)
 
+    global alert_label0
+    global alert_label1
+    global alert_label2
+    alert_label0.config(text = alert_list[2])
+    alert_label1.config(text = alert_list[1])
+    alert_label2.config(text = alert_list[0])
 
-    label = ttk.Label(a,text=message)
-    label.grid(column= 0, row = 0, padx = 30, pady = 10)
-
-    button0 = ttk.Button(a, text="Ok", bootstyle=(INFO, OUTLINE), command = a.destroy)
-    button0.grid(column= 0, row = 1, padx = 5, pady = 5)
-
-    return return_value
-
+    
 def run_ps_file(file_name, error_message, log_message, success_name):
+    flag = True
+    alert_function("")
+    alert_function("")
+    alert_function("Carregando...")
     p = subprocess.Popen(["powershell",file_name], stdout=subprocess.PIPE)
     with p.stdout:
         for line in iter(p.stdout.readline, b''):
             line = line.decode("utf-8")
             if(line == 'Erro\r\n'):
                 logging.error(log_message)
-                yes_no_popup_error(error_message)
+                alert_function(error_message)
+                flag = False
                 return
-    ok_popup_message(success_name + ' finalizado com sucesso.')
+    if(flag == True):
+        alert_function(success_name)
     
-                
+def check_drivers():
+    has_driver = False
+    p = subprocess.Popen(["powershell","Get-ChildItem -Path 'C:\Windows\System32\DriverStore\FileRepository' -Recurse -Directory | Select-String 'ftdibus' -List"], stdout=subprocess.PIPE)
+    with p.stdout:
+        for line in iter(p.stdout.readline, b''):
+            line = line.decode("utf-8")
+            if("ftdi" in line):
+                has_driver = True
+
+    if(has_driver == False):
+        alert_function("Não tem driver FTDI")
+        response = requests.get("https://ftdichip.com/wp-content/uploads/2021/08/CDM212364_Setup.zip")
+        open('FTDI_DRIVER_SETUP.zip', 'wb').write(response.content)
+        install = subprocess.Popen(["powershell", ".\\FTDI_DRIVER_SETUP.zip"])
+    else:
+        alert_function("Tem driver FTDI")
+        has_driver = False
+
+    p = subprocess.Popen(["powershell","Get-ChildItem -Path 'C:\Windows\System32\DriverStore\FileRepository' -Recurse -Directory | Select-String 'slabv' -List"], stdout=subprocess.PIPE)
+    with p.stdout:
+        for line in iter(p.stdout.readline, b''):
+            line = line.decode("utf-8")
+            if("slabv" in line):
+                has_driver = True
+
+    if(has_driver == False):
+        alert_function("Não tem driver SLABV")
+        response = requests.get("https://www.silabs.com/documents/public/software/CP210x_Windows_Drivers.zip")
+        open('CP210x_Windows_Drivers.zip', 'wb').write(response.content)
+        install = subprocess.Popen(["powershell", ".\\CP210x_Windows_Drivers.zip"])
+    else:
+        alert_function("Tem driver SLABV")
 
 
 
@@ -93,22 +117,37 @@ def upgrade_esptool():
     run_ps_file('./esptool_install.ps1', 'Erro ao instalar o esptool.  ','Erro ao instalar o esptool', 'Esptool instalado com sucesso')
 
 def popup_system():
+    check_drivers()
     python_version = os.popen('python --version').readlines()
     esptool_version = os.popen('esptool.py version').readlines()
     esptool_has_file = os.path.exists('./esptool')
 
     if(python_version[0] != "Python 3.9.8\n" or esptool_has_file != True or esptool_version[0] != "esptool.py v3.2\n"):
-        ok_popup_message('Sistema desatualizado, realizando atualizações')
+        alert_function('Sistema desatualizado, realizando atualizações')
         if(python_version[0] != "Python 3.9.8\n"):
             upgrade_python()
         if(esptool_has_file != True or esptool_version[0] != "esptool.py v3.2\n"):
             upgrade_esptool()
     else:
-        ok_popup_message('Sistema atualizado.')
+        alert_function('Sistema atualizado.')
 
 
 
-
+def run_esptool(port, bin):
+    flag = True
+    p = subprocess.Popen(["powershell","./esp_command.ps1 "+ port + " " + bin], stdout=subprocess.PIPE)
+    with p.stdout:
+        for line in iter(p.stdout.readline, b''):
+            line = line.decode("utf-8")
+            if("Failed to connect to ESP32" in line):
+                 alert_function("Impossível conectar com a placa")
+                 alert_function("Verifique a porta COM e o log")
+                 logging.error(line)
+                 flag = False
+                 break
+        if(flag == True):
+            alert_function("Firmware passado com sucesso")
+    
 
 
 
@@ -133,10 +172,11 @@ def find_USB_device(USB_DEV_NAME=None):
                 print("{} port is {}".format(USB_DEV_NAME,usb_id))
                 print(usb_id[0])
                 return usb_id
+
+
                 
 
 def firmware(FileName, bin):
-    flag = True
 
     global cbc0
 
@@ -145,16 +185,12 @@ def firmware(FileName, bin):
 
     url = 'https://api.dielenergia.com/get-firmware-file/prod/'+FileName+'.bin'
     headers = {'Authorization':'Bearer '+token}
-    r = requests.get(url, headers, allow_redirects=True)
+    r = requests.get(url, headers = headers, allow_redirects=True)
     open(bin, 'wb').write(r.content)
-    
 
     run_ps_file("./load_files.ps1 "+ bin, 'Erro ao baixar os arquivos.  ', 'Erro ao passar os arquivos binários para a pasta do esptool. ', 'Arquivos organizados com sucesso')
 
-    run_ps_file("./esp_command.ps1 "+ port + " " + bin, 'Erro ao passar o firmware. Verifique a porta COM. ', 'Erro ao rodar o comando do esptool', 'Firmware passado com sucesso')
-
-    if (flag == True):
-        ok_popup_message('Firmware atualizado')
+    run_esptool(port,bin)
 
 
 class gravacao_firmware:
@@ -166,10 +202,12 @@ class gravacao_firmware:
 
 
     def __init__(self, root):
-        # root.protocol("WM_DELETE_WINDOW", on_closing)
         subprocess.run(["powershell", "-Command", 'Set-ExecutionPolicy RemoteSigned'], capture_output=True, text=True, input="A")
+        self.root = root
         photo = tk.PhotoImage(file = "Logo.png")
-        root.iconphoto(False, photo)
+        self.root.iconphoto(False, photo)
+
+        self.root.protocol("WM_DELETE_WINDOW", on_closing)
 
         self.final_dictionary = {}
 
@@ -193,15 +231,18 @@ class gravacao_firmware:
 
 
         # Left Frame
-        self.left_frame = tk.Frame(root)
+        self.left_frame = tk.Frame(self.root)
         self.left_frame.grid(column= 0, row = 0,padx= 10, pady= 10)
 
         self.b1 = ttk.Button(self.left_frame, text="Verificar sistema", bootstyle=(INFO, OUTLINE),command = popup_system)
         self.b1.grid(column= 0, row = 0, padx=5, pady=2)
 
+        self.b2 = ttk.Button(self.left_frame, text="Abrir log", bootstyle=(INFO, OUTLINE),command = get_log)
+        self.b2.grid(column= 0, row = 1, padx=5, pady=2)
+
 
         # Central frame
-        self.central_frame = tk.Frame(root)
+        self.central_frame = tk.Frame(self.root)
         self.central_frame.grid(column = 1,row=0, padx = 10, pady=10)
 
         global cbc0
@@ -220,7 +261,7 @@ class gravacao_firmware:
 
         # Right frame
 
-        self.right_frame = tk.Frame(root)
+        self.right_frame = tk.Frame(self.root)
         self.right_frame.grid(column = 3,row=0, padx = 5, pady=5)
 
         self.usernameLabel = ttk.Label(self.right_frame, text='Selecionar porta')
@@ -235,6 +276,26 @@ class gravacao_firmware:
         self.usernameLabel.grid(column = 0, row = 2,pady= 2)
         self.b4 = ttk.Button(self.right_frame, text="Atualizar o firmware", bootstyle=(INFO, OUTLINE),command = self.get_params)
         self.b4.grid(row = 3, padx=5, pady=5)
+
+        #Last frame
+        self.last_frame = ttk.Labelframe(self.root, text = "Alertas")
+        self.last_frame.grid(column = 0,row=1, padx = 10, pady = 10, columnspan= 5)
+
+        global alert_list
+        global alert_label0
+        global alert_label1
+        global alert_label2
+
+        alert_label0 = ttk.Label(self.last_frame, text = alert_list[2])
+        alert_label0.grid(column=0, row=0, padx = 160, pady = 10)
+
+        alert_label1 = ttk.Label(self.last_frame, text = alert_list[1])
+        alert_label1.grid(column=0, row=1, padx = 160, pady = 10)
+
+        alert_label2 = ttk.Label(self.last_frame, text = alert_list[0])
+        alert_label2.grid(column=0, row=2, padx = 160, pady = 10)
+
+
 
     def get_params(self):
         FileName = cbc0.get() + "/" + self.cbc1.get()
@@ -299,11 +360,12 @@ class tela_login:
 
 class menu:
     def __init__(self, root):
-        root.protocol("WM_DELETE_WINDOW", on_closing)
+        self.root = root
+        self.root.protocol("WM_DELETE_WINDOW", on_closing)
         photo = tk.PhotoImage(file = "Logo.png")
         root.title('Diel Energia')
         root.iconphoto(False, photo)
-        self.frame = tk.Frame(root)
+        self.frame = tk.Frame(self.root)
         self.frame.pack(padx=30)
         self.main_label = ttk.Label(self.frame, text= 'Menu')
         self.main_label.grid(column= 0, row=0, pady=5)
@@ -320,7 +382,7 @@ class menu:
     def tela_firmware(self):
         self.newWindow = tk.Toplevel(root)
         self.app = gravacao_firmware(self.newWindow)
-        root.withdraw()
+        self.root.withdraw()
 
 
 
