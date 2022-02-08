@@ -13,10 +13,7 @@ try{
 
     Invoke-WebRequest -Uri $source -OutFile $destination
 
-    .\python.exe /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
-
-    Write-Output "Python instalado"
-
+    .\python.exe
 
 }
 catch{

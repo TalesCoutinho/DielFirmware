@@ -1,3 +1,4 @@
+from asyncio.windows_events import NULL
 from fileinput import filename
 from msilib.schema import File
 import tkinter as tk
@@ -8,11 +9,14 @@ from ttkbootstrap.constants import *
 import sys,os
 import serial, serial.tools.list_ports
 import subprocess
+from subprocess import PIPE, STDOUT, CREATE_NO_WINDOW
 
 import requests
 import json #native
 
 import logging
+
+import datetime
 
 
 
@@ -41,8 +45,9 @@ def get_log():
 
 def alert_function(message):
     global alert_list
+    now = datetime.datetime.now()
     alert_list.pop()
-    alert_list.insert(0, message)
+    alert_list.insert(0, "[{}:{}:{}] - {}".format(now.hour, now.minute, now.second, message))
 
     global alert_label0
     global alert_label1
@@ -57,7 +62,7 @@ def run_ps_file(file_name, error_message, log_message, success_name):
     alert_function("")
     alert_function("")
     alert_function("Carregando...")
-    p = subprocess.Popen(["powershell",file_name], stdout=subprocess.PIPE)
+    p = subprocess.Popen(["powershell",file_name], stdout=subprocess.PIPE, creationflags=CREATE_NO_WINDOW)
     with p.stdout:
         for line in iter(p.stdout.readline, b''):
             line = line.decode("utf-8")
@@ -71,7 +76,7 @@ def run_ps_file(file_name, error_message, log_message, success_name):
     
 def check_drivers():
     has_driver = False
-    p = subprocess.Popen(["powershell","Get-ChildItem -Path 'C:\Windows\System32\DriverStore\FileRepository' -Recurse -Directory | Select-String 'ftdibus' -List"], stdout=subprocess.PIPE)
+    p = subprocess.Popen(["powershell","Get-ChildItem -Path 'C:\Windows\System32\DriverStore\FileRepository' -Recurse -Directory | Select-String 'ftdibus' -List"], stdout=subprocess.PIPE, creationflags=CREATE_NO_WINDOW)
     with p.stdout:
         for line in iter(p.stdout.readline, b''):
             line = line.decode("utf-8")
@@ -82,7 +87,8 @@ def check_drivers():
         alert_function("Não tem driver FTDI")
         response = requests.get("https://ftdichip.com/wp-content/uploads/2021/08/CDM212364_Setup.zip")
         open('FTDI_DRIVER_SETUP.zip', 'wb').write(response.content)
-        install = subprocess.Popen(["powershell", ".\\FTDI_DRIVER_SETUP.zip"])
+        install = subprocess.Popen(["powershell", ".\\FTDI_DRIVER_SETUP.zip"], creationflags=CREATE_NO_WINDOW)
+        return has_driver
     else:
         alert_function("Tem driver FTDI")
         has_driver = False
@@ -96,11 +102,20 @@ def check_drivers():
 
     if(has_driver == False):
         alert_function("Não tem driver SLABV")
-        response = requests.get("https://www.silabs.com/documents/public/software/CP210x_Windows_Drivers.zip")
-        open('CP210x_Windows_Drivers.zip', 'wb').write(response.content)
-        install = subprocess.Popen(["powershell", ".\\CP210x_Windows_Drivers.zip"])
+        p = subprocess.Popen(["powershell","Get-ChildItem -Path 'C:\Windows\System32\DriverStore\FileRepository' -Recurse -Directory | Select-String 'slabv' -List"], stdout=subprocess.PIPE)
+        with p.stdout:
+            for line in iter(p.stdout.readline, b''):
+                line = line.decode("utf-8")
+                if("64" in line):
+                    subprocess.Popen(["powershell","./SLABV_X64.exe"], stdout=subprocess.PIPE)
+                    return has_driver
+                if("32" in line):
+                    subprocess.Popen(["powershell","./SLABV_X32.exe"], stdout=subprocess.PIPE)
+                    return has_driver
+        
     else:
         alert_function("Tem driver SLABV")
+        return has_driver
 
 
 
@@ -117,17 +132,26 @@ def upgrade_esptool():
     run_ps_file('./esptool_install.ps1', 'Erro ao instalar o esptool.  ','Erro ao instalar o esptool', 'Esptool instalado com sucesso')
 
 def popup_system():
-    check_drivers()
-    python_version = os.popen('python --version').readlines()
-    esptool_version = os.popen('esptool.py version').readlines()
+    if(check_drivers() == False):
+        alert_function("Verifique o sistema novamente")
+        alert_function("após a instalação do driver")
+        return False
+    python_version = os.popen('py -3 --version').readlines()
+    esptool_version = os.popen('py -3 ./esptool/esptool-master/esptool.py version').readlines()
     esptool_has_file = os.path.exists('./esptool')
 
-    if(python_version[0] != "Python 3.9.8\n" or esptool_has_file != True or esptool_version[0] != "esptool.py v3.2\n"):
+
+    if(esptool_version == NULL):
+        esptool_version = ''
+
+    if("Python 3." not in python_version[0] or esptool_has_file != True or "esptool.py v3." not in esptool_version[0]):
         alert_function('Sistema desatualizado, realizando atualizações')
-        if(python_version[0] != "Python 3.9.8\n"):
+        if("Python 3." not in python_version[0]):
             upgrade_python()
-        if(esptool_has_file != True or esptool_version[0] != "esptool.py v3.2\n"):
+            alert_function("Instalando o python")
+        if(esptool_has_file != True or "esptool.py v3." not in esptool_version[0]):
             upgrade_esptool()
+            alert_function("Instalando o esptool")
     else:
         alert_function('Sistema atualizado.')
 
@@ -135,7 +159,7 @@ def popup_system():
 
 def run_esptool(port, bin):
     flag = True
-    p = subprocess.Popen(["powershell","./esp_command.ps1 "+ port + " " + bin], stdout=subprocess.PIPE)
+    p = subprocess.Popen(["powershell","./esp_command.ps1 "+ port + " " + bin], stdout=subprocess.PIPE, creationflags=CREATE_NO_WINDOW)
     with p.stdout:
         for line in iter(p.stdout.readline, b''):
             line = line.decode("utf-8")
@@ -145,10 +169,23 @@ def run_esptool(port, bin):
                  logging.error(line)
                  flag = False
                  break
+            if("Erro" in line):
+                alert_function("Sistema desatualizado")
+                logging.error("Esptool não instalado, caminho não encontrado")
+                flag = False
+                break
         if(flag == True):
             alert_function("Firmware passado com sucesso")
     
 
+def refresh_port_selection():
+    global cb1
+    ports = find_USB_device()
+    cb1.config(value = ports)
+    cb1.current(len(find_USB_device())-1)
+    for item in ports:
+        if("serial" in item):
+            cb1.current(ports[ports.index(item)])
 
 
 def find_USB_device(USB_DEV_NAME=None):
@@ -196,6 +233,7 @@ def firmware(FileName, bin):
 class gravacao_firmware:
 
     def pick_version(self, event):
+        refresh_port_selection()
         global cbc0
         self.cbc1.config(value = self.final_dictionary[cbc0.get()])
         self.cbc1.current(0)
@@ -267,8 +305,7 @@ class gravacao_firmware:
         self.usernameLabel = ttk.Label(self.right_frame, text='Selecionar porta')
         self.usernameLabel.grid(column = 0, row = 0,pady= 2)
         global cb1
-        cb1 = ttk.Combobox(self.right_frame, values = find_USB_device())
-        cb1.current(len(find_USB_device())-1)
+        cb1 = ttk.Combobox(self.right_frame, values = "")
         cb1.grid(column = 0, row = 1, pady = 5, padx = 5)
 
 
