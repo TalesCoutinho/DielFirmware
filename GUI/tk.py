@@ -41,7 +41,22 @@ def get_log():
     subprocess.run(["powershell", "./log_file.log"])
 
 
-
+def center(win):
+    """
+    centers a tkinter window
+    :param win: the main window or Toplevel window to center
+    """
+    win.update_idletasks()
+    width = win.winfo_width()
+    frm_width = win.winfo_rootx() - win.winfo_x()
+    win_width = width + 2 * frm_width
+    height = win.winfo_height()
+    titlebar_height = win.winfo_rooty() - win.winfo_y()
+    win_height = height + titlebar_height + frm_width
+    x = win.winfo_screenwidth() // 2 - win_width // 2
+    y = win.winfo_screenheight() // 2 - win_height // 2
+    win.geometry("+%d+%d" % (x, y))
+    win.deiconify()
 
 def alert_function(message):
     global alert_list
@@ -137,6 +152,10 @@ def popup_system():
         alert_function("após a instalação do driver")
         return False
     python_version = os.popen('py -3 --version').readlines()
+    if("Python 3." not in python_version):
+        python_version = os.popen('python --version').readlines()
+        if("Python 3." not in python_version):
+            python_version = os.popen('python3 --version').readlines()
     esptool_version = os.popen('py -3 ./esptool/esptool-master/esptool.py version').readlines()
     esptool_has_file = os.path.exists('./esptool')
 
@@ -172,6 +191,11 @@ def run_esptool(port, bin):
             if("Erro" in line):
                 alert_function("Sistema desatualizado")
                 logging.error("Esptool não instalado, caminho não encontrado")
+                flag = False
+                break
+            if("Não reconhecido como" in line):
+                alert_function("Erro")
+                logging.error("Python instalado incorretamente")
                 flag = False
                 break
         if(flag == True):
@@ -242,6 +266,7 @@ class gravacao_firmware:
     def __init__(self, root):
         subprocess.run(["powershell", "-Command", 'Set-ExecutionPolicy RemoteSigned'], capture_output=True, text=True, input="A")
         self.root = root
+        center(self.root)
         photo = tk.PhotoImage(file = "Logo.png")
         self.root.iconphoto(False, photo)
 
@@ -348,6 +373,7 @@ class gravacao_firmware:
 class tela_login:
     def __init__(self, master):
         self.root = master
+        center(self.root)
         self.frame = tk.Frame(self.root)
         self.frame.grid(column= 0, row = 0,padx= 10, pady= 10)
 
@@ -391,6 +417,7 @@ class tela_login:
         
     def openMainWindow(self):
         root = self.root
+        center(root)
         self.newWindow = tk.Toplevel(root)
         self.app = menu(self.newWindow)
         self.root.withdraw()
@@ -398,6 +425,7 @@ class tela_login:
 class menu:
     def __init__(self, root):
         self.root = root
+        center(self.root)
         self.root.protocol("WM_DELETE_WINDOW", on_closing)
         photo = tk.PhotoImage(file = "Logo.png")
         root.title('Diel Energia')
@@ -433,6 +461,7 @@ if __name__ == '__main__':
     root = ttk.Window("Diel Energia",themename="darkly")
     photo = tk.PhotoImage(file = "Logo.png")
     root.iconphoto(False, photo)
+    center(root)
     app = tela_login(root)
     root.protocol("WM_DELETE_WINDOW", on_closing)
     root.mainloop()
