@@ -122,10 +122,10 @@ def check_drivers():
             for line in iter(p.stdout.readline, b''):
                 line = line.decode("utf-8")
                 if("64" in line):
-                    subprocess.Popen(["powershell","./SLABV_X64.exe"], stdout=subprocess.PIPE)
+                    subprocess.Popen(["powershell","./slabv_drivers/x64.exe"], stdout=subprocess.PIPE)
                     return has_driver
                 if("32" in line):
-                    subprocess.Popen(["powershell","./SLABV_X32.exe"], stdout=subprocess.PIPE)
+                    subprocess.Popen(["powershell","./slabv_drivers/x32.exe"], stdout=subprocess.PIPE)
                     return has_driver
         
     else:
@@ -151,24 +151,22 @@ def popup_system():
         alert_function("Verifique o sistema novamente")
         alert_function("após a instalação do driver")
         return False
-    python_version = os.popen('py -3 --version').readlines()
-    if("Python 3." not in python_version):
-        python_version = os.popen('python --version').readlines()
-        if("Python 3." not in python_version):
-            python_version = os.popen('python3 --version').readlines()
-    esptool_version = os.popen('py -3 ./esptool/esptool-master/esptool.py version').readlines()
+    python_version = ''
+    p = subprocess.Popen(["powershell",".\python_test.ps1"], stdout=subprocess.PIPE)
+    with p.stdout:
+        for line in iter(p.stdout.readline, b''):
+            line = line.decode("utf-8")
+            print(line)
+            if("Python 3." in line):
+                python_version = line
     esptool_has_file = os.path.exists('./esptool')
 
-
-    if(esptool_version == NULL):
-        esptool_version = ''
-
-    if("Python 3." not in python_version[0] or esptool_has_file != True or "esptool.py v3." not in esptool_version[0]):
+    if("Python 3." not in python_version or esptool_has_file != True):
         alert_function('Sistema desatualizado, realizando atualizações')
-        if("Python 3." not in python_version[0]):
+        if("Python 3." not in python_version):
             upgrade_python()
             alert_function("Instalando o python")
-        if(esptool_has_file != True or "esptool.py v3." not in esptool_version[0]):
+        if(esptool_has_file != True):
             upgrade_esptool()
             alert_function("Instalando o esptool")
     else:
@@ -257,14 +255,13 @@ def firmware(FileName, bin):
 class gravacao_firmware:
 
     def pick_version(self, event):
-        refresh_port_selection()
         global cbc0
         self.cbc1.config(value = self.final_dictionary[cbc0.get()])
         self.cbc1.current(0)
 
 
     def __init__(self, root):
-        subprocess.run(["powershell", "-Command", 'Set-ExecutionPolicy RemoteSigned'], capture_output=True, text=True, input="A")
+        subprocess.run(["powershell", "-Command", 'Set-ExecutionPolicy Bypass'], capture_output=True, text=True, input="A")
         self.root = root
         center(self.root)
         photo = tk.PhotoImage(file = "Logo.png")
@@ -331,13 +328,14 @@ class gravacao_firmware:
         self.usernameLabel.grid(column = 0, row = 0,pady= 2)
         global cb1
         cb1 = ttk.Combobox(self.right_frame, values = "")
-        cb1.grid(column = 0, row = 1, pady = 5, padx = 5)
+        cb1.grid(column = 0, row = 1, pady = 2, padx = 5)
+
+        self.b4 = ttk.Button(self.right_frame, text="Atualizar portas COM", bootstyle=(INFO, OUTLINE),command = refresh_port_selection)
+        self.b4.grid(row = 2, padx=5, pady=2)
 
 
-        self.usernameLabel = ttk.Label(self.right_frame, text='')
-        self.usernameLabel.grid(column = 0, row = 2,pady= 2)
-        self.b4 = ttk.Button(self.right_frame, text="Atualizar o firmware", bootstyle=(INFO, OUTLINE),command = self.get_params)
-        self.b4.grid(row = 3, padx=5, pady=5)
+        self.b5 = ttk.Button(self.right_frame, text="Atualizar o firmware", bootstyle=(INFO, OUTLINE),command = self.get_params)
+        self.b5.grid(row = 3, padx=5, pady=2)
 
         #Last frame
         self.last_frame = ttk.Labelframe(self.root, text = "Alertas")

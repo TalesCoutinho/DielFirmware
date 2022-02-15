@@ -10,7 +10,23 @@ Set-Location .\esptool\
 
 Set-Location .\esptool-master\
 
+try{
 py -3 .\setup.py install
+}
+catch{
+    try{
+        python3 .\setup.py install
+    }
+    catch{
+        try{
+            python .\setup.py install
+        }
+        catch{
+            Write-Output "Erro"
+        }
+    }
+}
+
 
 Copy-Item "..\..\bootloader.bin" -Destination .\
 Copy-Item "..\..\ota_data_initial.bin" -Destination .\
