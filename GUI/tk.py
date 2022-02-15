@@ -196,6 +196,17 @@ def run_esptool(port, bin):
                 logging.error("Python instalado incorretamente")
                 flag = False
                 break
+            if("No such file or directory:" in line):
+                alert_function("Erro")
+                logging.error("Erro ao baixar o arquivo binário do dash")
+                logging.error(line)
+                flag = False
+                break
+            if("serial.serialutil.SerialException: could not open port" in line):
+                alert_function("Erro com a porta COM")
+                logging.error(line)
+                flag = False
+                break
         if(flag == True):
             alert_function("Firmware passado com sucesso")
     
