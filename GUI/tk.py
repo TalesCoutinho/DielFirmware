@@ -30,6 +30,7 @@ token = ''
 user = ''
 password = ''
 alert_list = ["","",""]
+is_error_alert_list = ["light", "light", "light"]
 alert_label0 = ''
 alert_label1 = ''
 alert_label2 = ''
@@ -58,36 +59,44 @@ def center(win):
     win.geometry("+%d+%d" % (x, y))
     win.deiconify()
 
-def alert_function(message):
+def alert_function(message, is_error):
     global alert_list
+    global is_error_alert_list
     now = datetime.datetime.now()
     alert_list.pop()
     alert_list.insert(0, "[{}:{}:{}] - {}".format(now.hour, now.minute, now.second, message))
+    if(is_error == 'Erro' or is_error == 'Error'):
+        is_error_alert_list.pop()
+        is_error_alert_list.insert(0,"danger")
+    else:
+        is_error_alert_list.pop()
+        is_error_alert_list.insert(0,"light")
+
 
     global alert_label0
     global alert_label1
     global alert_label2
-    alert_label0.config(text = alert_list[2])
-    alert_label1.config(text = alert_list[1])
-    alert_label2.config(text = alert_list[0])
+    alert_label0.config(text = alert_list[2], bootstyle = is_error_alert_list[2])
+    alert_label1.config(text = alert_list[1], bootstyle = is_error_alert_list[1])
+    alert_label2.config(text = alert_list[0], bootstyle = is_error_alert_list[0])
 
     
 def run_ps_file(file_name, error_message, log_message, success_name):
     flag = True
-    alert_function("")
-    alert_function("")
-    alert_function("Carregando...")
+    alert_function("", "Not error")
+    alert_function("", "Not error")
+    alert_function("Carregando...", "Not error")
     p = subprocess.Popen(["powershell",file_name], stdout=subprocess.PIPE, creationflags=CREATE_NO_WINDOW)
     with p.stdout:
         for line in iter(p.stdout.readline, b''):
             line = line.decode("utf-8")
             if(line == 'Erro\r\n'):
                 logging.error(log_message)
-                alert_function(error_message)
+                alert_function(error_message, "Error")
                 flag = False
                 return
     if(flag == True):
-        alert_function(success_name)
+        alert_function(success_name, "Not error")
     
 def check_drivers():
     has_driver = False
@@ -99,13 +108,13 @@ def check_drivers():
                 has_driver = True
 
     if(has_driver == False):
-        alert_function("Não tem driver FTDI")
+        alert_function("Não tem driver FTDI", "Error")
         response = requests.get("https://ftdichip.com/wp-content/uploads/2021/08/CDM212364_Setup.zip")
         open('FTDI_DRIVER_SETUP.zip', 'wb').write(response.content)
         install = subprocess.Popen(["powershell", ".\\FTDI_DRIVER_SETUP.zip"], creationflags=CREATE_NO_WINDOW)
         return has_driver
     else:
-        alert_function("Tem driver FTDI")
+        alert_function("Tem driver FTDI", "Not error")
         has_driver = False
 
     p = subprocess.Popen(["powershell","Get-ChildItem -Path 'C:\Windows\System32\DriverStore\FileRepository' -Recurse -Directory | Select-String 'slabv' -List"], stdout=subprocess.PIPE)
@@ -116,7 +125,7 @@ def check_drivers():
                 has_driver = True
 
     if(has_driver == False):
-        alert_function("Não tem driver SLABV")
+        alert_function("Não tem driver SLABV", "Error")
         p = subprocess.Popen(["powershell","Get-ChildItem -Path 'C:\Windows\System32\DriverStore\FileRepository' -Recurse -Directory | Select-String 'slabv' -List"], stdout=subprocess.PIPE)
         with p.stdout:
             for line in iter(p.stdout.readline, b''):
@@ -129,7 +138,7 @@ def check_drivers():
                     return has_driver
         
     else:
-        alert_function("Tem driver SLABV")
+        alert_function("Tem driver SLABV", "Not error")
         return has_driver
 
 
@@ -148,8 +157,8 @@ def upgrade_esptool():
 
 def popup_system():
     if(check_drivers() == False):
-        alert_function("Verifique o sistema novamente")
-        alert_function("após a instalação do driver")
+        alert_function("Verifique o sistema novamente", "Not error")
+        alert_function("após a instalação do driver", "Not error")
         return False
     python_version = ''
     p = subprocess.Popen(["powershell",".\python_test.ps1"], stdout=subprocess.PIPE)
@@ -162,59 +171,78 @@ def popup_system():
     esptool_has_file = os.path.exists('./esptool')
 
     if("Python 3." not in python_version or esptool_has_file != True):
-        alert_function('Sistema desatualizado, realizando atualizações')
+        alert_function('Sistema desatualizado, realizando atualizações', "Not error")
         if("Python 3." not in python_version):
             upgrade_python()
-            alert_function("Instalando o python")
+            alert_function("Instalando o python", "Not error")
         if(esptool_has_file != True):
             upgrade_esptool()
-            alert_function("Instalando o esptool")
+            alert_function("Instalando o esptool", "Not error")
     else:
-        alert_function('Sistema atualizado.')
+        alert_function('Sistema atualizado.', "Not error")
 
 
 
 def run_esptool(port, bin):
+    error = ""
     flag = True
+    port_flag = False
+    for text in find_USB_device():
+        if(port in text):
+            port_flag = True
+            
+    if(port_flag == False):
+        alert_function("Erro com a porta COM","Error")
+        logging.error("A porta COM selecionada não condiz com nenhuma porta no sistema")
+        return
     p = subprocess.Popen(["powershell","./esp_command.ps1 "+ port + " " + bin], stdout=subprocess.PIPE, creationflags=CREATE_NO_WINDOW)
     with p.stdout:
         for line in iter(p.stdout.readline, b''):
             line = line.decode("utf-8")
+            error = error + "\n" + line
             if("Failed to connect to ESP32" in line):
-                 alert_function("Impossível conectar com a placa")
-                 alert_function("Verifique a porta COM e o log")
+                 alert_function("Impossível conectar com a placa", "Error")
+                 alert_function("Verifique a porta COM e o log", "Error")
                  logging.error(line)
                  flag = False
                  break
             if("Erro" in line):
-                alert_function("Sistema desatualizado")
+                alert_function("Sistema desatualizado", "Error")
                 logging.error("Esptool não instalado, caminho não encontrado")
                 flag = False
                 break
             if("Não reconhecido como" in line):
-                alert_function("Erro")
+                alert_function("Erro", "Error")
                 logging.error("Python instalado incorretamente")
                 flag = False
                 break
             if("No such file or directory:" in line):
-                alert_function("Erro")
+                alert_function("Erro", "Error")
                 logging.error("Erro ao baixar o arquivo binário do dash")
                 logging.error(line)
                 flag = False
                 break
             if("serial.serialutil.SerialException: could not open port" in line):
-                alert_function("Erro com a porta COM")
+                alert_function("Erro com a porta COM", "Error")
                 logging.error(line)
                 flag = False
                 break
+            if("Hard resetting via RTS pin" in line):
+                alert_function("Passagem concluída", "Not error")
+                flag = False
+                break
         if(flag == True):
-            alert_function("Firmware passado com sucesso")
+            alert_function("Erro", "Error")
+            logging.error(error)
     
 
 def refresh_port_selection():
     global cb1
     ports = find_USB_device()
     cb1.config(value = ports)
+    if(ports == ''):
+        alert_function("Nenhuma porta encontrada", "Error")
+        return
     cb1.current(len(find_USB_device())-1)
     for item in ports:
         if("serial" in item):
@@ -251,6 +279,10 @@ def firmware(FileName, bin):
     global cbc0
 
     global cb1
+    if(cb1.get() == ""):
+        alert_function("Erro na porta COM", "Error")
+        logging.error("Nenhuma porta COM selecionada")
+        return
     port = cb1.get()[0] + cb1.get()[1] + cb1.get()[2] + cb1.get()[3]
 
     url = 'https://api.dielenergia.com/get-firmware-file/prod/'+FileName+'.bin'
@@ -390,16 +422,21 @@ class tela_login:
         self.usernameLabel.grid(row = 0, column = 0)
         self.myUsername = tk.StringVar()
         self.username = ttk.Entry(self.frame, width = 40, textvariable=self.myUsername)
+        self.username.bind("<Return>", self.event_get_credentials)
         self.username.grid(row = 1, column = 0, pady = 5)
 
         self.passwordLabel = ttk.Label(self.frame, text='Senha')
         self.passwordLabel.grid(row = 2, column = 0)
         self.myPassword = tk.StringVar()
         self.password = ttk.Entry(self.frame, show="*", width = 40, textvariable= self.myPassword)
+        self.password.bind("<Return>", self.event_get_credentials)
         self.password.grid(row = 3, column = 0, pady = 5)
 
         self.button = ttk.Button(self.frame, text="Conectar", bootstyle=(INFO, OUTLINE), width = 10, command=self.get_credentials)
         self.button.grid(row = 4, column = 0, pady = 5)
+
+    def event_get_credentials(self, event):
+        self.get_credentials()
 
     def get_credentials(self):
         global user
@@ -417,7 +454,7 @@ class tela_login:
         headers = {'Content-Type':'application/json;charset=utf-8'}
         response = requests.post(url, data = json.dumps(body), headers=headers)
         response = response.content.decode("utf-8")
-        if(response == "Invalid password"):
+        if(response == "Invalid password" or response == "Could not find informed user"):
             ttk.dialogs.Messagebox.ok(message = 'Usuário ou senha incorretos', title='Login fail', alert=False, parent=None)
         else:
             response=json.loads(response)
